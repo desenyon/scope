@@ -5,28 +5,31 @@ import { writeFile } from "node:fs/promises";
 import { analyze } from "./analyze.ts";
 import { renderTerminal } from "./display/terminal.ts";
 import { renderMarkdown } from "./display/markdown.ts";
+import { Spinner } from "./display/spinner.ts";
 
 const args = process.argv.slice(2);
 
 function printHelp(): void {
+  const g = (t: string) => t.split("").map((c, i) => ["\x1b[38;5;141m", "\x1b[38;5;135m", "\x1b[38;5;39m", "\x1b[38;5;51m"][i % 4] + c).join("") + "\x1b[0m";
+  const d = (t: string) => "\x1b[2m" + t + "\x1b[0m";
   console.log(`
-  ${gradient("SCOPE")} — Beautiful project intelligence CLI
+  ${g("scope")}  ${d("project intelligence")}
 
-  ${dim("Usage:")}
-    scope [path]              Analyze a project (default: current directory)
-    scope export [path]       Export report as Markdown
-    scope json [path]         Output raw JSON report
+  ${d("Usage")}
+    scope [path]              Analyze a project
+    scope export [path]       Markdown report
+    scope json [path]         JSON output
 
-  ${dim("Options:")}
-    -o, --output <file>       Write output to file instead of stdout
-    -q, --quiet               Minimal output (no banner)
-    -h, --help                Show this help
+  ${d("Options")}
+    -o, --output <file>       Save to file
+    -q, --quiet               No spinner
+    -h, --help                Help
 
-  ${dim("Examples:")}
-    scope                     Analyze current directory
-    scope ~/projects/my-app   Analyze specific project
+  ${d("Examples")}
+    scope
+    scope ~/projects/my-app
     scope export -o REPORT.md
-    scope json | jq '.totalCode'
+    scope json . | jq '.health.score'
 `);
 }
 
@@ -56,7 +59,7 @@ function parseArgs(argv: string[]): {
     const arg = argv[i];
     if (arg === "-h" || arg === "--help") return { command: "help", path: ".", quiet: false };
     if (arg === "-q" || arg === "--quiet") { quiet = true; continue; }
-    if (arg === "--version") { console.log("scope 1.1.0"); process.exit(0); }
+    if (arg === "--version") { console.log("scope 1.2.0"); process.exit(0); }
     if (arg === "-o" || arg === "--output") { output = argv[++i]; continue; }
     if (arg === "export") { command = "export"; continue; }
     if (arg === "json") { command = "json"; continue; }
@@ -77,15 +80,12 @@ async function main(): Promise<void> {
 
   const resolvedPath = resolve(path);
 
-  if (!quiet && command === "analyze") {
-    process.stderr.write("\x1b[38;5;141m\x1b[2m  ◌ Scanning " + resolvedPath + "...\x1b[0m\r");
-  }
+  const spinner = !quiet && command === "analyze" ? new Spinner(`scanning ${resolvedPath}`) : null;
+  spinner?.start();
 
   const report = await analyze({ path: resolvedPath });
 
-  if (!quiet && command === "analyze") {
-    process.stderr.write(" ".repeat(60) + "\r");
-  }
+  spinner?.stop();
 
   let content: string;
 

@@ -1,332 +1,364 @@
 import type { ScopeReport } from "../types.ts";
+import {
+  tty, R, bold, dim, fg, bg, paint, gradient, strip, vis, pad, padL, truncate, fmt, W,
+  hr, panel, gradientBar, langColor,
+} from "./theme.ts";
 
-// Beautiful terminal styling without external deps
+// ── Primitives ────────────────────────────────────────────────────────────────
 
-const supportsColor = process.stdout.isTTY ?? false;
-
-const palette = {
-  reset: "\x1b[0m",
-  bold: "\x1b[1m",
-  dim: "\x1b[2m",
-  italic: "\x1b[3m",
-  underline: "\x1b[4m",
-
-  // Gradient-inspired accent colors
-  violet: "\x1b[38;5;141m",
-  purple: "\x1b[38;5;135m",
-  blue: "\x1b[38;5;39m",
-  cyan: "\x1b[38;5;51m",
-  teal: "\x1b[38;5;43m",
-  green: "\x1b[38;5;82m",
-  yellow: "\x1b[38;5;220m",
-  orange: "\x1b[38;5;208m",
-  red: "\x1b[38;5;203m",
-  pink: "\x1b[38;5;212m",
-  white: "\x1b[38;5;255m",
-  gray: "\x1b[38;5;245m",
-  darkGray: "\x1b[38;5;240m",
-};
-
-function c(text: string, ...styles: string[]): string {
-  if (!supportsColor) return text;
-  return styles.join("") + text + palette.reset;
+function chip(label: string, color = fg.muted): string {
+  return paint(` ${label} `, fg.ink, bg.accent, color);
 }
 
-function gradientText(text: string): string {
-  if (!supportsColor) return text;
-  const colors = [palette.violet, palette.purple, palette.blue, palette.cyan];
-  return text
-    .split("")
-    .map((ch, i) => colors[i % colors.length] + ch)
-    .join("") + palette.reset;
+function pill(text: string, color = fg.cyan): string {
+  return paint(` ${text} `, color, bg.card);
 }
 
-function bar(ratio: number, width = 24): string {
-  const filled = Math.round(ratio * width);
-  const empty = width - filled;
-  return c("█".repeat(filled), palette.cyan) + c("░".repeat(empty), palette.darkGray);
+function section(title: string, subtitle?: string): string {
+  const head = `  ${paint("▎", fg.violet)} ${paint(title, bold, fg.ink)}`;
+  const sub = subtitle ? paint(`  ${subtitle}`, dim, fg.muted) : "";
+  return `\n${head}${sub}\n${hr("─", fg.faint)}`;
 }
 
-function formatNumber(n: number): string {
-  return n.toLocaleString("en-US");
+function statRow(cards: { value: string; label: string; color: string }[]): string {
+  const cw = 12;
+  const gap = " ";
+  const box = (s: string) => paint("│", fg.faint) + padL(s, cw) + paint("│", fg.faint);
+  const top = "  " + cards.map(() => paint("┌" + "─".repeat(cw) + "┐", fg.faint)).join(gap);
+  const val = "  " + cards.map((c) => box(paint(c.value, bold, c.color))).join(gap);
+  const lbl = "  " + cards.map((c) => box(paint(c.label, dim, fg.muted))).join(gap);
+  const bot = "  " + cards.map(() => paint("└" + "─".repeat(cw) + "┘", fg.faint)).join(gap);
+  return [top, val, lbl, bot].join("\n");
 }
 
-function pad(str: string, len: number): string {
-  return str.length >= len ? str.slice(0, len) : str + " ".repeat(len - str.length);
+function healthGauge(score: number): string {
+  const color = score >= 80 ? fg.green : score >= 50 ? fg.yellow : fg.orange;
+  const filled = Math.round((score / 100) * 28);
+  const track = gradientBar(score / 100, 28);
+  return [
+    paint("  HEALTH", dim, fg.muted),
+    `  ${paint(String(score), bold, color)}${paint("/100", dim, fg.muted)}  ${track}`,
+  ].join("\n");
 }
 
-function box(title: string, lines: string[], color = palette.violet): string {
-  const innerWidth = Math.max(title.length + 2, ...lines.map((l) => stripAnsi(l).length));
-  const top = c("╭" + "─".repeat(innerWidth + 2) + "╮", color);
-  const header = c("│ ", color) + c(title, palette.bold, palette.white) + " ".repeat(innerWidth - title.length) + c(" │", color);
-  const sep = c("├" + "─".repeat(innerWidth + 2) + "┤", color);
-  const body = lines.map((l) => {
-    const visible = stripAnsi(l);
-    const padding = innerWidth - visible.length;
-    return c("│ ", color) + l + " ".repeat(Math.max(0, padding)) + c(" │", color);
-  });
-  const bottom = c("╰" + "─".repeat(innerWidth + 2) + "╯", color);
-  return [top, header, sep, ...body, bottom].join("\n");
+function stackedLangBar(languages: ScopeReport["languages"], totalCode: number, width = 40): string {
+  if (!totalCode) return "";
+  const segs: string[] = [];
+  let used = 0;
+  for (const lang of languages.slice(0, 6)) {
+    const w = Math.max(1, Math.round((lang.code / totalCode) * width));
+    if (used + w > width) break;
+    segs.push(paint("█".repeat(w), langColor(lang.language)));
+    used += w;
+  }
+  if (used < width) segs.push(paint("·".repeat(width - used), fg.faint));
+  return segs.join("");
 }
 
-function stripAnsi(s: string): string {
-  return s.replace(/\x1b\[[0-9;]*m/g, "");
+function kv(key: string, value: string, keyW = 14): string {
+  return paint(pad(key, keyW), dim, fg.muted) + value;
 }
 
-function sectionHeader(title: string, icon: string): string {
-  return "\n" + c(`  ${icon}  `, palette.cyan) + c(title, palette.bold, palette.white) + "\n" + c("  " + "─".repeat(40), palette.darkGray);
+function twoCol(left: string[], right: string[], colW = 36): string {
+  const rows: string[] = [];
+  const max = Math.max(left.length, right.length);
+  for (let i = 0; i < max; i++) {
+    const l = left[i] ?? "";
+    const r = right[i] ?? "";
+    rows.push("  " + pad(l, colW) + r);
+  }
+  return rows.join("\n");
 }
 
-export function renderTerminal(report: ScopeReport): string {
-  const lines: string[] = [];
-  const width = 64;
+// ── Hero ──────────────────────────────────────────────────────────────────────
 
-  // Banner
-  lines.push("");
-  lines.push(c("  ╔" + "═".repeat(width) + "╗", palette.violet));
-  lines.push(c("  ║", palette.violet) + gradientText(pad("  S C O P E", width)) + c("║", palette.violet));
-  lines.push(c("  ║", palette.violet) + c(pad("  Project Intelligence", width), palette.gray, palette.italic) + c("║", palette.violet));
-  lines.push(c("  ╚" + "═".repeat(width) + "╝", palette.violet));
-  lines.push("");
-
-  // Project identity
+function renderHero(report: ScopeReport): string {
   const name = report.identity.name ?? "Unknown Project";
-  const identityLines = [
-    c("Name", palette.gray) + "        " + c(name, palette.bold, palette.white),
-    report.identity.version ? c("Version", palette.gray) + "     " + c(`v${report.identity.version}`, palette.cyan) : "",
-    report.identity.description ? c("About", palette.gray) + "       " + c(truncate(report.identity.description, 48), palette.gray) : "",
-    report.identity.license ? c("License", palette.gray) + "     " + c(report.identity.license, palette.yellow) : "",
-    report.monorepo.isMonorepo ? c("Monorepo", palette.gray) + "    " + c(`${report.monorepo.tool} (${report.monorepo.packages} packages)`, palette.purple) : "",
-  ].filter(Boolean);
+  const inner = W - 4;
+  const border = (s: string) => paint("  │", fg.violet) + pad(s, inner) + paint("│", fg.violet);
+  const lines: string[] = [""];
 
-  lines.push(box("PROJECT", identityLines, palette.purple));
-  lines.push("");
+  lines.push(paint("  ╭" + "─".repeat(inner) + "╮", fg.violet));
+  lines.push(border(""));
 
-  // Key metrics row
-  const metrics = [
-    { label: "Code Lines", value: formatNumber(report.totalCode), color: palette.cyan },
-    { label: "Total Lines", value: formatNumber(report.totalLines), color: palette.blue },
-    { label: "Files", value: formatNumber(report.totalFiles), color: palette.green },
-    { label: "Languages", value: String(report.languages.length), color: palette.violet },
-    { label: "Dependencies", value: formatNumber(report.dependencyCount), color: palette.orange },
-    { label: "Frameworks", value: String(report.frameworks.length), color: palette.pink },
-  ];
+  const logo = gradient("  scope");
+  const tagline = paint("  project intelligence", dim, fg.muted);
+  lines.push(border(logo + tagline));
 
-  const metricRows = [
-    metrics.map((m) => c(pad(m.value, 12), palette.bold, m.color)).join(""),
-    metrics.map((m) => c(pad(m.label, 12), palette.dim, palette.gray)).join(""),
-  ];
-  lines.push("  " + metricRows[0]);
-  lines.push("  " + metricRows[1]);
-  lines.push("");
-  lines.push(c(`  Analyzed in ${report.durationMs}ms`, palette.dim, palette.gray) + c(` · loc: ${report.locEngine} · files: ${report.listEngine}`, palette.dim, palette.darkGray));
-  lines.push("");
+  lines.push(border(""));
 
-  // Languages table
-  lines.push(sectionHeader("Languages", "◆"));
-  const maxCode = report.languages[0]?.code ?? 1;
-  const langHeader = "  " + pad("Language", 16) + pad("Files", 8) + pad("Code", 10) + "Distribution";
-  lines.push(c(langHeader, palette.dim, palette.gray));
-  for (const lang of report.languages.slice(0, 12)) {
-    const ratio = lang.code / maxCode;
-    const row =
-      "  " +
-      c(pad(lang.language, 16), palette.white) +
-      c(pad(String(lang.files), 8), palette.gray) +
-      c(pad(formatNumber(lang.code), 10), palette.cyan) +
-      " " + bar(ratio, 20) +
-      c(` ${Math.round((lang.code / report.totalCode) * 100)}%`, palette.dim, palette.gray);
-    lines.push(row);
-  }
-  if (report.languages.length > 12) {
-    lines.push(c(`  ... +${report.languages.length - 12} more languages`, palette.dim, palette.gray));
+  const chips: string[] = [];
+  if (report.identity.version) chips.push(chip(`v${report.identity.version}`, fg.cyan));
+  if (report.identity.license) chips.push(chip(report.identity.license, fg.yellow));
+  if (report.monorepo.isMonorepo) chips.push(chip("monorepo", fg.purple));
+  if (report.git.isRepo && report.git.branch) chips.push(chip(report.git.branch, fg.green));
+
+  const titleLine = paint(name, bold, fg.ink) + (chips.length ? "   " + chips.join("") : "");
+  lines.push(border("  " + titleLine));
+
+  if (report.identity.description) {
+    lines.push(border("  " + truncate(report.identity.description, inner - 4)));
   }
 
-  // Frameworks
-  if (report.frameworks.length > 0) {
-    lines.push(sectionHeader("Frameworks & Stack", "◆"));
-    const byCategory = groupBy(report.frameworks, (f) => f.category);
-    for (const [category, items] of Object.entries(byCategory)) {
-      const tags = items
-        .map((f) => {
-          const ver = f.version ? c(`@${f.version}`, palette.dim, palette.gray) : "";
-          return c(f.name, palette.bold, palette.cyan) + ver;
-        })
-        .join(c(" · ", palette.darkGray));
-      lines.push("  " + c(category, palette.yellow) + "  " + tags);
-    }
-  }
-
-  // Runtimes
-  if (report.runtimes.length > 0) {
-    lines.push(sectionHeader("Runtimes", "◆"));
-    for (const rt of report.runtimes) {
-      lines.push("  " + c(rt.name, palette.bold, palette.green) + c(` ${rt.version}`, palette.cyan) + c(` (${rt.source})`, palette.dim, palette.gray));
-    }
-  }
-
-  // Package managers
-  if (report.packageManagers.length > 0) {
-    lines.push(sectionHeader("Package Managers", "◆"));
-    lines.push("  " + report.packageManagers.map((p) => c(p, palette.bold, palette.orange)).join(c(" · ", palette.darkGray)));
-  }
-
-  // Top dependencies
-  if (report.dependencies.length > 0) {
-    lines.push(sectionHeader("Dependencies", "◆"));
-    const prod = report.dependencies.filter((d) => d.type === "production").slice(0, 15);
-    for (const dep of prod) {
-      lines.push(
-        "  " + c(dep.name, palette.white) + c(` ${dep.version}`, palette.cyan) + c(` [${dep.ecosystem}]`, palette.dim, palette.gray)
-      );
-    }
-    if (report.dependencies.length > 15) {
-      lines.push(c(`  ... +${report.dependencies.length - 15} more`, palette.dim, palette.gray));
-    }
-  }
-
-  // Git
-  if (report.git.isRepo) {
-    lines.push(sectionHeader("Git", "◆"));
-    const gitLines = [
-      report.git.branch ? c("Branch", palette.gray) + "       " + c(report.git.branch, palette.green) : "",
-      report.git.remote ? c("Remote", palette.gray) + "       " + c(truncate(report.git.remote, 50), palette.gray) : "",
-      report.git.commitCount !== undefined ? c("Commits", palette.gray) + "      " + c(formatNumber(report.git.commitCount), palette.cyan) : "",
-      report.git.contributors !== undefined ? c("Contributors", palette.gray) + " " + c(String(report.git.contributors), palette.cyan) : "",
-      report.git.lastCommit ? c("Last commit", palette.gray) + " " + c(truncate(report.git.lastCommit, 45), palette.white) : "",
-      report.git.dirty ? c("  ⚠ Working tree has uncommitted changes", palette.yellow) : "",
-    ].filter(Boolean);
-    lines.push(gitLines.map((l) => "  " + l).join("\n"));
-  }
-
-  // DevOps
-  lines.push(sectionHeader("DevOps & Deploy", "◆"));
-  const devopsTags: string[] = [];
-  if (report.devops.docker) devopsTags.push(c("Docker", palette.bold, palette.blue));
-  if (report.devops.dockerCompose) devopsTags.push(c("Docker Compose", palette.bold, palette.blue));
-  if (report.devops.kubernetes) devopsTags.push(c("Kubernetes", palette.bold, palette.purple));
-  if (report.devops.terraform) devopsTags.push(c("Terraform", palette.bold, palette.orange));
-  if (report.devops.makefile) devopsTags.push(c("Makefile", palette.bold, palette.gray));
-  if (report.devops.ci.length) devopsTags.push(...report.devops.ci.map((c2) => c(c2, palette.bold, palette.green)));
-  lines.push("  " + (devopsTags.length ? devopsTags.join(c(" · ", palette.darkGray)) : c("None detected", palette.dim, palette.gray)));
-
-  // Testing
-  lines.push(sectionHeader("Testing", "◆"));
-  lines.push(
-    "  " +
-      c(`${report.testing.testFiles} test files`, palette.cyan) +
-      (report.testing.frameworks.length ? c(` · ${report.testing.frameworks.join(", ")}`, palette.white) : "") +
-      (report.testing.coverageConfig ? c(" · coverage configured", palette.green) : "")
-  );
-
-  // Quality
-  lines.push(sectionHeader("Code Quality", "◆"));
-  const qualityParts: string[] = [];
-  if (report.quality.typescript) qualityParts.push(c("TypeScript" + (report.quality.typescriptStrict ? " (strict)" : ""), palette.bold, palette.blue));
-  if (report.quality.linters.length) qualityParts.push(...report.quality.linters.map((l) => c(l, palette.yellow)));
-  if (report.quality.formatters.length) qualityParts.push(...report.quality.formatters.map((f) => c(f, palette.green)));
-  lines.push("  " + (qualityParts.length ? qualityParts.join(c(" · ", palette.darkGray)) : c("None detected", palette.dim, palette.gray)));
-
-  // Security
-  lines.push(sectionHeader("Security", "◆"));
-  const secParts: string[] = [];
-  secParts.push(report.security.hasLockfile ? c("Lockfile present", palette.green) : c("No lockfile", palette.yellow));
-  if (report.security.envFiles.length) secParts.push(c(`Env files: ${report.security.envFiles.join(", ")}`, palette.orange));
-  if (report.security.secretsPatterns > 0) secParts.push(c(`${report.security.secretsPatterns} potential secret patterns`, palette.red));
-  lines.push("  " + secParts.join(c(" · ", palette.darkGray)));
-
-  // Documentation
-  lines.push(sectionHeader("Documentation", "◆"));
-  lines.push(
-    "  " +
-      (report.documentation.hasReadme ? c(`README (${report.documentation.readmeLines} lines)`, palette.green) : c("No README", palette.yellow)) +
-      (report.documentation.hasDocsFolder ? c(` · docs/ (${report.documentation.docFiles} files)`, palette.cyan) : "")
-  );
-
-  // Health & codebase
-  lines.push(sectionHeader("Project Health", "◆"));
-  const healthBar = bar(report.health.score / 100, 20);
-  lines.push("  " + c(`Score ${report.health.score}/100 `, palette.bold, palette.white) + healthBar);
-  const failed = report.health.signals.filter((s) => !s.ok).map((s) => s.label);
-  if (failed.length) lines.push(c("  Missing: " + failed.join(", "), palette.dim, palette.gray));
-
-  if (report.codebase.primaryLanguage) {
-    lines.push(sectionHeader("Codebase", "◆"));
-    lines.push(
-      "  " +
-        c(report.codebase.primaryLanguage, palette.bold, palette.cyan) +
-        c(` (${report.codebase.primaryLanguagePct}% of code)`, palette.gray) +
-        c(` · ${report.codebase.repoSizeHuman}`, palette.white) +
-        (report.codebase.todoCount ? c(` · ${report.codebase.todoCount} TODOs`, palette.yellow) : "") +
-        (report.codebase.fixmeCount ? c(` · ${report.codebase.fixmeCount} FIXMEs`, palette.orange) : "")
-    );
-    if (report.git.repoAgeDays !== undefined) {
-      lines.push(c(`  Repo age: ${report.git.repoAgeDays} days`, palette.dim, palette.gray));
-    }
-  }
-
-  if (report.database.systems.length || report.database.hasMigrations) {
-    lines.push(sectionHeader("Database", "◆"));
-    lines.push("  " + (report.database.systems.length ? report.database.systems.map((d) => c(d, palette.blue)).join(c(" · ", palette.darkGray)) : c("None detected", palette.dim, palette.gray)));
-    if (report.database.hasMigrations) lines.push(c("  Migrations: " + report.database.migrationPaths.join(", "), palette.gray));
-  }
-
-  if (report.routes.total > 0) {
-    lines.push(sectionHeader("Routes", "◆"));
-    lines.push(
-      "  " +
-        c(`${report.routes.apiRoutes} API`, palette.cyan) +
-        c(` · ${report.routes.pageRoutes} pages`, palette.white) +
-        (report.routes.components ? c(` · ${report.routes.components} components`, palette.gray) : "")
-    );
-  }
-
-  if (report.architecture.patterns.length) {
-    lines.push(sectionHeader("Architecture", "◆"));
-    lines.push("  " + report.architecture.patterns.map((p) => c(p, palette.purple)).join(c(" · ", palette.darkGray)));
-  }
-
-  if (report.scripts.count > 0) {
-    lines.push(sectionHeader("Scripts", "◆"));
-    const flags = [
-      report.scripts.hasDev && "dev",
-      report.scripts.hasBuild && "build",
-      report.scripts.hasTest && "test",
-      report.scripts.hasLint && "lint",
-    ].filter(Boolean);
-    lines.push("  " + c(`${report.scripts.count} npm scripts`, palette.white) + (flags.length ? c(` · ${flags.join(", ")}`, palette.gray) : ""));
-  }
-
-  if (report.codebase.dockerServices.length) {
-    lines.push(sectionHeader("Docker Services", "◆"));
-    lines.push("  " + report.codebase.dockerServices.map((s) => c(s, palette.blue)).join(c(" · ", palette.darkGray)));
-  }
-
-  // Structure
-  lines.push(sectionHeader("Structure", "◆"));
-  lines.push(
-    "  " +
-      c(`${formatNumber(report.structure.totalFiles)} files`, palette.white) +
-      c(` · ${formatNumber(report.structure.totalDirectories)} directories`, palette.gray) +
-      c(` · depth ${report.structure.depth}`, palette.gray)
-  );
-  if (report.structure.largestFiles.length > 0) {
-    lines.push(c("  Largest files:", palette.dim, palette.gray));
-    for (const f of report.structure.largestFiles.slice(0, 5)) {
-      lines.push("    " + c(pad(f.path, 40), palette.gray) + c(formatNumber(f.lines) + " lines", palette.cyan));
-    }
-  }
-
-  lines.push("");
-  lines.push(c("  ─".repeat(32), palette.darkGray));
-  lines.push(c(`  ${report.path}`, palette.dim, palette.gray));
-  lines.push("");
+  lines.push(border("  " + paint(truncate(report.path, inner - 4), dim, fg.muted)));
+  lines.push(border(""));
+  lines.push(paint("  ╰" + "─".repeat(inner) + "╯", fg.violet));
 
   return lines.join("\n");
 }
 
-function truncate(s: string, max: number): string {
-  return s.length <= max ? s : s.slice(0, max - 1) + "…";
+// ── Main ──────────────────────────────────────────────────────────────────────
+
+export function renderTerminal(report: ScopeReport): string {
+  const out: string[] = [];
+
+  out.push(renderHero(report));
+
+  // Stats ribbon
+  out.push("");
+  out.push(statRow([
+    { value: fmt(report.totalCode), label: "code lines", color: fg.cyan },
+    { value: fmt(report.totalFiles), label: "files", color: fg.green },
+    { value: String(report.languages.length), label: "languages", color: fg.purple },
+    { value: fmt(report.dependencyCount), label: "dependencies", color: fg.orange },
+    { value: String(report.frameworks.length), label: "frameworks", color: fg.pink },
+    { value: String(report.health.score), label: "health", color: fg.lime },
+  ]));
+
+  // Timing + composition
+  out.push("");
+  out.push(healthGauge(report.health.score));
+  if (report.languages.length > 1) {
+    out.push("  " + paint("composition", dim, fg.muted) + "  " + stackedLangBar(report.languages, report.totalCode));
+  }
+  const meta: string[] = [
+    paint(`${report.durationMs}ms`, dim, fg.muted),
+    paint(report.codebase.repoSizeHuman, dim, fg.faint),
+  ];
+  if (report.codebase.primaryLanguage) {
+    meta.push(
+      paint(report.codebase.primaryLanguage, bold, langColor(report.codebase.primaryLanguage)) +
+        paint(` ${report.codebase.primaryLanguagePct}%`, dim, fg.muted)
+    );
+  }
+  out.push("  " + meta.join(paint("  ·  ", fg.faint)));
+
+  // Languages
+  out.push(section("Languages", `${fmt(report.totalLines)} total lines across ${report.languages.length} languages`));
+  const maxCode = report.languages[0]?.code ?? 1;
+  for (const lang of report.languages.slice(0, 10)) {
+    if (!lang.code && lang.language === "Markdown") continue;
+    const share = report.totalCode > 0 ? Math.round((lang.code / report.totalCode) * 100) : 0;
+    out.push(
+      "  " +
+        pad(paint(lang.language, langColor(lang.language)), 16) +
+        gradientBar(lang.code / maxCode, 24) +
+        padL(paint(`${share}%`, dim, fg.muted), 5) +
+        padL(paint(fmt(lang.code), dim, fg.faint), 10)
+    );
+  }
+  if (report.languages.length > 10) {
+    out.push(paint(`  +${report.languages.length - 10} more`, dim, fg.faint));
+  }
+
+  // Stack
+  if (report.frameworks.length > 0) {
+    out.push(section("Stack"));
+    const byCat = groupBy(report.frameworks, (f) => f.category);
+    for (const [cat, items] of Object.entries(byCat)) {
+      const pills = items.map((f) => {
+        const v = f.version ? paint(`@${f.version}`, dim, fg.muted) : "";
+        return pill(f.name, fg.cyan) + v;
+      });
+      out.push("  " + paint(cat, dim, fg.yellow) + "  " + pills.join(" "));
+    }
+  }
+
+  const metaLeft: string[] = [];
+  const metaRight: string[] = [];
+
+  if (report.runtimes.length) {
+    metaLeft.push(paint("Runtimes", bold, fg.ink));
+    for (const rt of report.runtimes.slice(0, 4)) {
+      metaLeft.push("  " + paint(rt.name, fg.green) + paint(` ${rt.version}`, fg.cyan));
+    }
+  }
+
+  if (report.packageManagers.length) {
+    metaRight.push(paint("Package managers", bold, fg.ink));
+    metaRight.push("  " + report.packageManagers.map((p) => pill(p, fg.orange)).join(" "));
+  }
+
+  if (metaLeft.length || metaRight.length) {
+    out.push("");
+    out.push(twoCol(metaLeft, metaRight));
+  }
+
+  // Dependencies
+  if (report.dependencies.length > 0) {
+    out.push(section("Dependencies", `${report.dependencyCount} total`));
+    const prod = report.dependencies.filter((d) => d.type === "production");
+    const cols = 2;
+    const colW = Math.floor((W - 6) / cols);
+    for (let i = 0; i < Math.min(prod.length, 12); i += cols) {
+      const cells: string[] = [];
+      for (let j = 0; j < cols; j++) {
+        const dep = prod[i + j];
+        if (!dep) continue;
+        cells.push(
+          pad(
+            paint(dep.name, fg.ink) + paint(` ${dep.version}`, dim, fg.cyan),
+            colW
+          )
+        );
+      }
+      out.push("  " + cells.join(""));
+    }
+    if (prod.length > 12) out.push(paint(`  +${prod.length - 12} more production deps`, dim, fg.faint));
+  }
+
+  // Git
+  if (report.git.isRepo) {
+    out.push(section("Git"));
+    const gitLeft = [
+      kv("branch", paint(report.git.branch ?? "—", fg.green)),
+      kv("commits", paint(fmt(report.git.commitCount ?? 0), fg.cyan)),
+      kv("contributors", paint(String(report.git.contributors ?? "—"), fg.cyan)),
+    ];
+    const gitRight = [
+      kv("age", paint(report.git.repoAgeDays !== undefined ? `${report.git.repoAgeDays} days` : "—", fg.ink)),
+      kv("last commit", paint(truncate(report.git.lastCommit ?? "—", 28), fg.ink)),
+      report.git.dirty ? kv("status", paint("uncommitted changes", fg.yellow)) : kv("status", paint("clean", fg.green)),
+    ];
+    out.push(twoCol(gitLeft, gitRight));
+    if (report.git.remote) {
+      out.push("  " + paint(truncate(report.git.remote, W - 4), dim, fg.faint));
+    }
+  }
+
+  // Insight cards (2x2)
+  out.push(section("Insights"));
+
+  const devops: string[] = [];
+  if (report.devops.docker) devops.push(pill("Docker", fg.blue));
+  if (report.devops.dockerCompose) devops.push(pill("Compose", fg.blue));
+  if (report.devops.kubernetes) devops.push(pill("K8s", fg.purple));
+  if (report.devops.terraform) devops.push(pill("Terraform", fg.orange));
+  devops.push(...report.devops.ci.map((c) => pill(c, fg.green)));
+
+  const testing = [
+    paint(`${report.testing.testFiles}`, bold, fg.cyan) + paint(" test files", dim, fg.muted),
+    report.testing.frameworks.length ? report.testing.frameworks.map((f) => pill(f, fg.teal)).join(" ") : paint("no framework detected", dim, fg.faint),
+  ].join("\n  ");
+
+  const security = [
+    report.security.hasLockfile ? pill("lockfile", fg.green) : pill("no lockfile", fg.yellow),
+    report.security.envFiles.length ? pill(`${report.security.envFiles.length} env files`, fg.orange) : "",
+    report.security.secretsPatterns > 0 ? pill(`${report.security.secretsPatterns} secret warnings`, fg.red) : "",
+  ].filter(Boolean).join(" ");
+
+  const docs = [
+    report.documentation.hasReadme ? pill(`readme · ${report.documentation.readmeLines}L`, fg.green) : pill("no readme", fg.yellow),
+    report.documentation.hasDocsFolder ? pill(`docs · ${report.documentation.docFiles} files`, fg.cyan) : "",
+  ].filter(Boolean).join(" ");
+
+  const quality = [
+    report.quality.typescript ? pill("typescript" + (report.quality.typescriptStrict ? " strict" : ""), fg.blue) : "",
+    ...report.quality.linters.map((l) => pill(l.toLowerCase(), fg.yellow)),
+    ...report.quality.formatters.map((f) => pill(f.toLowerCase(), fg.lime)),
+  ].filter(Boolean).join(" ") || paint("none detected", dim, fg.faint);
+
+  out.push(twoCol(
+    [paint("DevOps", bold, fg.ink), "  " + (devops.join(" ") || paint("—", dim, fg.faint))],
+    [paint("Testing", bold, fg.ink), "  " + testing],
+  ));
+  out.push("");
+  out.push(twoCol(
+    [paint("Security", bold, fg.ink), "  " + security],
+    [paint("Docs & quality", bold, fg.ink), "  " + docs, "  " + quality],
+  ));
+
+  // Health signals — compact row
+  const ok = report.health.signals.filter((s) => s.ok);
+  const miss = report.health.signals.filter((s) => !s.ok);
+  if (ok.length || miss.length) {
+    out.push("");
+    if (ok.length) out.push("  " + ok.map((s) => pill(s.label.toLowerCase(), fg.green)).join(" "));
+    if (miss.length) out.push("  " + paint("gap", dim, fg.muted) + "  " + miss.map((s) => pill(s.label.toLowerCase(), fg.faint)).join(" "));
+  }
+
+  // Extended sections (only when relevant)
+  const extras: string[] = [];
+
+  if (report.database.systems.length) {
+    extras.push(paint("Database", bold, fg.ink) + "  " + report.database.systems.map((d) => pill(d, fg.blue)).join(" "));
+    if (report.database.hasMigrations) extras.push(paint("  migrations", dim, fg.muted) + "  " + report.database.migrationPaths.join(", "));
+  }
+
+  if (report.routes.total > 0) {
+    extras.push(
+      paint("Routes", bold, fg.ink) +
+        "  " + pill(`${report.routes.apiRoutes} api`, fg.cyan) +
+        "  " + pill(`${report.routes.pageRoutes} pages`, fg.ink) +
+        (report.routes.components ? "  " + pill(`${report.routes.components} components`, fg.muted) : "")
+    );
+  }
+
+  if (report.architecture.patterns.length) {
+    extras.push(paint("Architecture", bold, fg.ink) + "  " + report.architecture.patterns.map((p) => pill(p, fg.purple)).join(" "));
+  }
+
+  if (report.codebase.todoCount || report.codebase.fixmeCount) {
+    extras.push(
+      paint("Tech debt", bold, fg.ink) +
+        (report.codebase.todoCount ? "  " + pill(`${report.codebase.todoCount} todo`, fg.yellow) : "") +
+        (report.codebase.fixmeCount ? "  " + pill(`${report.codebase.fixmeCount} fixme`, fg.orange) : "")
+    );
+  }
+
+  if (report.codebase.dockerServices.length) {
+    extras.push(paint("Services", bold, fg.ink) + "  " + report.codebase.dockerServices.map((s) => pill(s, fg.blue)).join(" "));
+  }
+
+  if (extras.length) {
+    out.push(section("Details"));
+    out.push(extras.map((l) => "  " + l).join("\n"));
+  }
+
+  // Structure
+  out.push(section("Structure"));
+  out.push(
+    "  " +
+      pill(`${fmt(report.structure.totalFiles)} files`, fg.ink) +
+      "  " + pill(`${fmt(report.structure.totalDirectories)} dirs`, fg.muted) +
+      "  " + pill(`depth ${report.structure.depth}`, fg.muted)
+  );
+
+  if (report.structure.largestFiles.length > 0) {
+    out.push("");
+    const maxLines = report.structure.largestFiles[0]?.lines ?? 1;
+    for (const f of report.structure.largestFiles.slice(0, 5)) {
+      out.push(
+        "  " +
+          pad(truncate(f.path, 42), 44) +
+          gradientBar(f.lines / maxLines, 16) +
+          "  " +
+          paint(fmt(f.lines) + "L", dim, fg.cyan)
+      );
+    }
+  }
+
+  // Footer
+  out.push("");
+  out.push(hr("╌", fg.faint));
+  out.push(
+    paint("  scope", gradient) +
+      paint(`  ·  ${report.durationMs}ms  ·  `, dim, fg.muted) +
+      paint(`${report.locEngine} + ${report.listEngine}`, dim, fg.faint)
+  );
+  out.push("");
+
+  return out.join("\n");
 }
 
 function groupBy<T>(arr: T[], key: (item: T) => string): Record<string, T[]> {

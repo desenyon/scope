@@ -1,6 +1,6 @@
 {
   "name": "scope",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "One command to see what any codebase is made of — lines of code, languages, frameworks, and dependencies",
   "type": "module",
   "bin": {
