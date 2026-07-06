@@ -1,7 +1,7 @@
 {
   "name": "scope",
   "version": "1.0.0",
-  "description": "Beautiful, blazing-fast project intelligence CLI — LOC, frameworks, deps, git, DevOps, and more",
+  "description": "One command to see what any codebase is made of — lines of code, languages, frameworks, and dependencies",
   "type": "module",
   "bin": {
     "scope": "./src/index.ts"

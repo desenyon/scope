@@ -7,9 +7,9 @@
 </p>
 
 <p align="center">
-  <strong>Beautiful, blazing-fast project intelligence.</strong><br/>
-  One command to understand any codebase — lines of code, frameworks, dependencies,<br/>
-  runtimes, git history, DevOps, testing, security, and more.
+  <strong>One command to understand any codebase.</strong><br/>
+  Run <code>scope</code> in any project to instantly see lines of code, languages,<br/>
+  frameworks, dependencies, git info, and more — in a beautiful terminal report.
 </p>
 
 <p align="center">
