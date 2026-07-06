@@ -1,0 +1,28 @@
+{
+  "name": "scope",
+  "version": "1.0.0",
+  "description": "Beautiful, blazing-fast project intelligence CLI — LOC, frameworks, deps, git, DevOps, and more",
+  "type": "module",
+  "bin": {
+    "scope": "./src/index.ts"
+  },
+  "scripts": {
+    "scope": "bun run src/index.ts",
+    "qa": "bash scripts/qa.sh",
+    "install:global": "bash install.sh"
+  },
+  "files": ["src", "install.sh", "LICENSE", "README.md"],
+  "keywords": [
+    "cli", "project", "analyzer", "loc", "scope", "tokei",
+    "lines-of-code", "framework-detection", "dependencies",
+    "devops", "monorepo", "project-stats"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/desenyon/scope.git"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  }
+}
