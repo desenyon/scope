@@ -16,12 +16,14 @@ import { scanTesting } from "./scanners/testing.ts";
 import { scanQuality } from "./scanners/quality.ts";
 import { scanSecurity } from "./scanners/security.ts";
 import { scanDocumentation } from "./scanners/documentation.ts";
+import {
+  scanScripts, scanDatabase, scanRoutes, scanArchitecture, scanHealth, scanCodebase,
+} from "./scanners/extras.ts";
 
 export async function analyze(options: AnalyzeOptions): Promise<ScopeReport> {
   const start = performance.now();
   const path = resolve(options.path);
 
-  // Phase 1: parallel I/O — single index build, manifests, git, tokei
   const [index, manifests, git, tokeiLoc, tools] = await Promise.all([
     buildProjectIndex(path),
     loadManifests(path),
@@ -30,17 +32,16 @@ export async function analyze(options: AnalyzeOptions): Promise<ScopeReport> {
     detectTools(),
   ]);
 
-  // Phase 2: LOC fallback + structure (needs index) in parallel with sync scanners
   const loc = tokeiLoc
     ? { ...tokeiLoc, engine: "tokei" as const }
     : { ...(await countLocNative(index)), engine: "native" as const };
 
-  const [structure, security] = await Promise.all([
+  const [structure, security, codebase] = await Promise.all([
     scanStructure(index),
     scanSecurity(index, manifests),
+    scanCodebase(path, index, loc.languages, manifests),
   ]);
 
-  // Phase 3: sync scanners (CPU-only, instant)
   const identity = scanIdentity(manifests);
   const runtimes = scanRuntimes(manifests);
   const monorepo = scanMonorepo(manifests);
@@ -53,6 +54,11 @@ export async function analyze(options: AnalyzeOptions): Promise<ScopeReport> {
   const depNames = new Set(dependencies.map((d) => d.name));
   const frameworks = scanFrameworks(manifests, depNames);
   const testing = scanTesting(index, manifests, depNames);
+  const scripts = scanScripts(manifests);
+  const database = scanDatabase(index, manifests, depNames);
+  const routes = scanRoutes(index);
+  const architecture = scanArchitecture(index);
+  const health = scanHealth(manifests, index, { git, devops, testing, documentation, security });
 
   if (!identity.name) identity.name = path.split("/").pop();
 
@@ -81,5 +87,11 @@ export async function analyze(options: AnalyzeOptions): Promise<ScopeReport> {
     locEngine: loc.engine,
     listEngine: index.listEngine,
     tools: { tokei: tools.tokei, fd: tools.fd, rg: tools.rg },
+    scripts,
+    database,
+    routes,
+    architecture,
+    health,
+    codebase,
   };
 }

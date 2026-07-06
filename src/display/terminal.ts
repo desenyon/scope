@@ -243,6 +243,65 @@ export function renderTerminal(report: ScopeReport): string {
       (report.documentation.hasDocsFolder ? c(` · docs/ (${report.documentation.docFiles} files)`, palette.cyan) : "")
   );
 
+  // Health & codebase
+  lines.push(sectionHeader("Project Health", "◆"));
+  const healthBar = bar(report.health.score / 100, 20);
+  lines.push("  " + c(`Score ${report.health.score}/100 `, palette.bold, palette.white) + healthBar);
+  const failed = report.health.signals.filter((s) => !s.ok).map((s) => s.label);
+  if (failed.length) lines.push(c("  Missing: " + failed.join(", "), palette.dim, palette.gray));
+
+  if (report.codebase.primaryLanguage) {
+    lines.push(sectionHeader("Codebase", "◆"));
+    lines.push(
+      "  " +
+        c(report.codebase.primaryLanguage, palette.bold, palette.cyan) +
+        c(` (${report.codebase.primaryLanguagePct}% of code)`, palette.gray) +
+        c(` · ${report.codebase.repoSizeHuman}`, palette.white) +
+        (report.codebase.todoCount ? c(` · ${report.codebase.todoCount} TODOs`, palette.yellow) : "") +
+        (report.codebase.fixmeCount ? c(` · ${report.codebase.fixmeCount} FIXMEs`, palette.orange) : "")
+    );
+    if (report.git.repoAgeDays !== undefined) {
+      lines.push(c(`  Repo age: ${report.git.repoAgeDays} days`, palette.dim, palette.gray));
+    }
+  }
+
+  if (report.database.systems.length || report.database.hasMigrations) {
+    lines.push(sectionHeader("Database", "◆"));
+    lines.push("  " + (report.database.systems.length ? report.database.systems.map((d) => c(d, palette.blue)).join(c(" · ", palette.darkGray)) : c("None detected", palette.dim, palette.gray)));
+    if (report.database.hasMigrations) lines.push(c("  Migrations: " + report.database.migrationPaths.join(", "), palette.gray));
+  }
+
+  if (report.routes.total > 0) {
+    lines.push(sectionHeader("Routes", "◆"));
+    lines.push(
+      "  " +
+        c(`${report.routes.apiRoutes} API`, palette.cyan) +
+        c(` · ${report.routes.pageRoutes} pages`, palette.white) +
+        (report.routes.components ? c(` · ${report.routes.components} components`, palette.gray) : "")
+    );
+  }
+
+  if (report.architecture.patterns.length) {
+    lines.push(sectionHeader("Architecture", "◆"));
+    lines.push("  " + report.architecture.patterns.map((p) => c(p, palette.purple)).join(c(" · ", palette.darkGray)));
+  }
+
+  if (report.scripts.count > 0) {
+    lines.push(sectionHeader("Scripts", "◆"));
+    const flags = [
+      report.scripts.hasDev && "dev",
+      report.scripts.hasBuild && "build",
+      report.scripts.hasTest && "test",
+      report.scripts.hasLint && "lint",
+    ].filter(Boolean);
+    lines.push("  " + c(`${report.scripts.count} npm scripts`, palette.white) + (flags.length ? c(` · ${flags.join(", ")}`, palette.gray) : ""));
+  }
+
+  if (report.codebase.dockerServices.length) {
+    lines.push(sectionHeader("Docker Services", "◆"));
+    lines.push("  " + report.codebase.dockerServices.map((s) => c(s, palette.blue)).join(c(" · ", palette.darkGray)));
+  }
+
   // Structure
   lines.push(sectionHeader("Structure", "◆"));
   lines.push(

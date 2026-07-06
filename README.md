@@ -1,194 +1,111 @@
 # scope
 
-<p align="center">
-  <img src="https://img.shields.io/badge/runtime-Bun-f9f1e1?style=for-the-badge&logo=bun" alt="Bun" />
-  <img src="https://img.shields.io/badge/speed-<500ms-00d4aa?style=for-the-badge" alt="Speed" />
-  <img src="https://img.shields.io/badge/license-MIT-8b5cf6?style=for-the-badge" alt="MIT" />
-</p>
+Instantly understand any codebase — languages, size, frameworks, dependencies, routes, database, git history, health score, and more.
 
-<p align="center">
-  <strong>One command to understand any codebase.</strong><br/>
-  Run <code>scope</code> in any project to instantly see lines of code, languages,<br/>
-  frameworks, dependencies, git info, and more — in a beautiful terminal report.
-</p>
-
-<p align="center">
-  <a href="#install">Install</a> ·
-  <a href="#usage">Usage</a> ·
-  <a href="#what-it-detects">Features</a> ·
-  <a href="#architecture">Architecture</a> ·
-  <a href="#performance">Performance</a>
-</p>
-
----
-
-## Why scope?
-
-You clone a repo. Before you write a line of code, you need to know what you're looking at. **scope** answers that in seconds:
-
-```
-scope ~/projects/unknown-repo
+```bash
+curl -fsSL https://raw.githubusercontent.com/desenyon/scope/main/install.sh | bash
 ```
 
-```
-  ╔════════════════════════════════════════════════════════════════╗
-  ║  S C O P E                                                     ║
-  ║  Project Intelligence                                          ║
-  ╚════════════════════════════════════════════════════════════════╝
+Then:
 
-╭────────────────────────────────────────────────────╮
-│ PROJECT                                            │
-├────────────────────────────────────────────────────┤
-│ Name        my-app                                 │
-│ Version     v2.4.1                                 │
-│ License     MIT                                    │
-╰────────────────────────────────────────────────────╯
-
-  42,891      51,203      312         8           47          6
-  Code Lines  Total Lines Files       Languages   DependenciesFrameworks
-
-  Analyzed in 89ms · loc: tokei · files: fd
+```bash
+scope                    # current directory
+scope ~/projects/my-app  # any path
 ```
 
-## Install
+## What it's for
 
-One command installs everything — Bun, tokei, fd, ripgrep, and links the CLI globally:
+**Onboarding.** You cloned a repo and need the lay of the land before touching code. `scope` gives you a full picture in one command — what language it's in, what framework it uses, how big it is, whether it has tests, CI, and a README.
+
+**Due diligence.** Auditing a dependency, evaluating an acquisition target, or reviewing a contractor's deliverable. Export a markdown report for your records.
+
+**Automation.** JSON output pipes into scripts, CI, or dashboards.
+
+```bash
+scope json . | jq '.totalCode, .frameworks[].name, .health.score'
+scope export -o REPORT.md
+```
+
+## Commands
+
+| Command | What it does |
+|---------|-------------|
+| `scope [path]` | Full report in the terminal |
+| `scope json [path]` | JSON for scripting (`jq`, CI, etc.) |
+| `scope export [path]` | Markdown report (`-o file.md` to save) |
+| `scope -q` | Suppress spinner |
+| `scope -h` | Help |
+
+## What you get
+
+**Code** — lines per language, primary language %, repo size, largest files, TODO/FIXME counts
+
+**Stack** — frameworks (60+ detected), dependencies with versions, runtime versions, package managers
+
+**Structure** — routes (API, pages, components), architecture patterns (App Router, MVC, monorepo layout), top-level directories
+
+**Database** — detected systems (Postgres, Redis, etc.), ORMs, migration folders
+
+**Git** — branch, commits, contributors, repo age, last commit, dirty state
+
+**Ops** — Docker, CI/CD, Kubernetes, Terraform, docker-compose services
+
+**Quality** — test files and frameworks, linters, formatters, TypeScript strict mode
+
+**Health score** — 0–100 based on README, license, lockfile, CI, tests, contributing guide, changelog, and more
+
+**Security** — lockfiles, env files, secret pattern warnings
+
+## JSON fields (for scripting)
+
+```bash
+scope json . | jq '{
+  name: .identity.name,
+  code: .totalCode,
+  lang: .codebase.primaryLanguage,
+  frameworks: [.frameworks[].name],
+  deps: .dependencyCount,
+  health: .health.score,
+  tests: .testing.testFiles,
+  age_days: .git.repoAgeDays
+}'
+```
+
+Key top-level fields: `totalCode`, `languages`, `frameworks`, `dependencies`, `git`, `devops`, `testing`, `health`, `codebase`, `database`, `routes`, `architecture`, `scripts`, `security`, `durationMs`.
+
+## Use cases
+
+**Compare two projects:**
+```bash
+scope json ./project-a | jq .totalCode
+scope json ./project-b | jq .totalCode
+```
+
+**CI health check** — fail if no tests or lockfile:
+```bash
+scope json . | jq -e '.testing.testFiles > 0 and .security.hasLockfile'
+```
+
+**Onboarding doc** — generate and commit:
+```bash
+scope export -o docs/PROJECT_SCOPE.md
+```
+
+## Requirements
+
+- macOS or Linux
+- `git` and `curl` (for install)
+- [Bun](https://bun.sh) is installed automatically if missing
+
+## Development
 
 ```bash
 git clone https://github.com/desenyon/scope.git
 cd scope
-./install.sh
-```
-
-That's it. Run `scope` anywhere.
-
-<details>
-<summary>Manual install</summary>
-
-```bash
-brew install oven-sh/bun/bun tokei fd ripgrep   # macOS
 bun install
-bun link
+bun run scope .
+bun run qa        # benchmark
 ```
-
-</details>
-
-## Usage
-
-```bash
-scope                     # analyze current directory
-scope ~/projects/my-app   # analyze any path
-scope export -o REPORT.md # export full markdown report
-scope json | jq '.totalCode'  # machine-readable JSON
-scope -q                  # quiet mode (no spinner)
-```
-
-### Commands
-
-| Command | Description |
-|---------|-------------|
-| `scope [path]` | Full terminal report (default) |
-| `scope export [path]` | Markdown export (`-o file.md`) |
-| `scope json [path]` | JSON output for scripting |
-| `scope -h` | Help |
-
-## What it detects
-
-### Code metrics
-- Lines of code per language (code, comments, blanks)
-- File counts and language distribution with bar charts
-- Largest files, extension breakdown, directory depth
-
-### Stack & dependencies
-- **60+ frameworks** — Next.js, React, Vue, Django, FastAPI, Electron, Prisma, Tailwind, LangChain, and more
-- **Dependencies** with versions across npm, cargo, pip, go modules, Ruby gems
-- **Runtime versions** from `.nvmrc`, `engines`, `go.mod`, `Cargo.toml`, `.python-version`
-- **Package managers** — bun, pnpm, yarn, npm, poetry, uv, cargo
-
-### Project metadata
-- Name, version, description, license, authors
-- Monorepo detection (workspaces, turborepo, nx, lerna, pnpm)
-
-### Git
-- Branch, remote, commit count, contributors, last commit, dirty state
-
-### DevOps & infrastructure
-- Docker, Docker Compose, Kubernetes, Terraform, Makefile
-- CI/CD: GitHub Actions, GitLab CI, CircleCI, Jenkins, Vercel, Netlify, Fly.io, Render
-
-### Quality & security
-- ESLint, Prettier, Biome, TypeScript strict mode
-- Test frameworks (Jest, Vitest, pytest, Playwright, Cypress) and test file count
-- Lockfile presence, `.env` files, secret pattern scanning
-
-### Documentation
-- README size, `docs/` folder file count
-
-## Architecture
-
-scope is built for **one filesystem pass** and **maximum parallelism**:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Phase 1 (parallel)                                         │
-│  ┌──────────┐ ┌───────────┐ ┌─────┐ ┌───────┐ ┌──────────┐ │
-│  │ fd/rg/   │ │ Manifest  │ │ Git │ │ tokei │ │ Tool     │ │
-│  │ native   │ │ preload   │ │     │ │ (LOC) │ │ detect   │ │
-│  │ index    │ │ (50 files)│ │     │ │       │ │          │ │
-│  └────┬─────┘ └─────┬─────┘ └──┬──┘ └───┬───┘ └──────────┘ │
-│       │             │          │        │                   │
-│  Phase 2 (parallel)│          │        │                   │
-│       ├─────────────┴──────────┴────────┘                   │
-│       │  structure · security · (native LOC fallback)       │
-│       │                                                     │
-│  Phase 3 (sync, instant)                                  │
-│       │  frameworks · deps · devops · testing · quality     │
-└───────┴─────────────────────────────────────────────────────┘
-```
-
-| Layer | Tool | Purpose |
-|-------|------|---------|
-| File listing | **fd** → **ripgrep** → native | Single index, no redundant walks |
-| LOC counting | **tokei** → native | Industry-standard speed + accuracy |
-| Runtime | **Bun** | Fast startup, parallel I/O |
-| Manifests | Parallel preload | 50 known files read once |
-
-## Performance
-
-Benchmarks on Apple Silicon (M-series):
-
-| Project | Files | Time | Engines |
-|---------|------:|-----:|---------|
-| scope (self) | 20 | **~10ms** | native/native |
-| Medium app | 500 | **~50ms** | tokei/fd |
-| Large monorepo | 5,000+ | **~150ms** | tokei/fd |
-
-Install the recommended tools for best performance:
-
-```bash
-brew install tokei fd ripgrep
-```
-
-Run the QA benchmark:
-
-```bash
-bun run qa
-```
-
-## Export example
-
-```bash
-scope export -o SCOPE.md
-```
-
-Produces a full markdown report with tables for languages, frameworks, dependencies, git, DevOps, testing, security, and structure — ready for PRs, onboarding docs, or wiki pages.
-
-## Tech stack
-
-- [Bun](https://bun.sh) — runtime
-- [tokei](https://github.com/XAMPPRocky/tokei) — LOC counting
-- [fd](https://github.com/sharkdp/fd) — fast file listing
-- [ripgrep](https://github.com/BurntSushi/ripgrep) — file listing fallback
 
 ## License
 

@@ -56,7 +56,7 @@ function parseArgs(argv: string[]): {
     const arg = argv[i];
     if (arg === "-h" || arg === "--help") return { command: "help", path: ".", quiet: false };
     if (arg === "-q" || arg === "--quiet") { quiet = true; continue; }
-    if (arg === "--version") { console.log("scope 1.0.0"); process.exit(0); }
+    if (arg === "--version") { console.log("scope 1.1.0"); process.exit(0); }
     if (arg === "-o" || arg === "--output") { output = argv[++i]; continue; }
     if (arg === "export") { command = "export"; continue; }
     if (arg === "json") { command = "json"; continue; }

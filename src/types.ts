@@ -1,3 +1,7 @@
+import type { ScriptsInfo, DatabaseInfo, RoutesInfo, ArchitectureInfo, HealthInfo, CodebaseInfo } from "./scanners/extras.ts";
+
+export type { ScriptsInfo, DatabaseInfo, RoutesInfo, ArchitectureInfo, HealthInfo, CodebaseInfo };
+
 export interface LanguageStats {
   language: string;
   files: number;
@@ -34,6 +38,8 @@ export interface GitInfo {
   commitCount?: number;
   lastCommit?: string;
   lastCommitDate?: string;
+  firstCommitDate?: string;
+  repoAgeDays?: number;
   contributors?: number;
   dirty?: boolean;
 }
@@ -123,6 +129,12 @@ export interface ScopeReport {
   locEngine: "tokei" | "native";
   listEngine: "fd" | "rg" | "native";
   tools: { tokei: boolean; fd: boolean; rg: boolean };
+  scripts: ScriptsInfo;
+  database: DatabaseInfo;
+  routes: RoutesInfo;
+  architecture: ArchitectureInfo;
+  health: HealthInfo;
+  codebase: CodebaseInfo;
 }
 
 export interface AnalyzeOptions {
