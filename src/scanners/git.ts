@@ -8,13 +8,15 @@ export async function scanGit(root: string): Promise<GitInfo> {
     if (isRepo?.trim() !== "true") return info;
     info.isRepo = true;
 
-    const [branch, remote, commitCount, lastCommit, lastCommitDate, firstCommit, dirty] = await Promise.all([
+    const [branch, remote, commitCount, lastCommit, lastCommitDate, rootHashes, dirty] = await Promise.all([
       runGit(root, ["branch", "--show-current"]),
       runGit(root, ["remote", "get-url", "origin"]).catch(() => null),
       runGit(root, ["rev-list", "--count", "HEAD"]).catch(() => null),
       runGit(root, ["log", "-1", "--format=%s"]).catch(() => null),
       runGit(root, ["log", "-1", "--format=%ci"]).catch(() => null),
-      runGit(root, ["log", "--reverse", "--format=%ci", "-1"]).catch(() => null),
+      // --reverse -1 selects newest first, then reverses that set — wrong for first commit.
+      // Root commits are parents=0; take the earliest when multiple roots exist.
+      runGit(root, ["rev-list", "--max-parents=0", "--reverse", "HEAD"]).catch(() => null),
       runGit(root, ["status", "--porcelain"]).then((s) => (s?.trim().length ?? 0) > 0).catch(() => false),
     ]);
 
@@ -23,12 +25,19 @@ export async function scanGit(root: string): Promise<GitInfo> {
     info.commitCount = commitCount ? parseInt(commitCount.trim(), 10) : undefined;
     info.lastCommit = lastCommit?.trim() || undefined;
     info.lastCommitDate = lastCommitDate?.trim() || undefined;
-    info.firstCommitDate = firstCommit?.trim() || undefined;
-    if (info.firstCommitDate) {
-      const first = new Date(info.firstCommitDate);
-      info.repoAgeDays = Math.floor((Date.now() - first.getTime()) / 86_400_000);
-    }
     info.dirty = dirty;
+
+    const firstHash = rootHashes?.trim().split("\n").filter(Boolean)[0];
+    if (firstHash) {
+      const firstCommit = await runGit(root, ["log", "-1", "--format=%ci", firstHash]).catch(() => null);
+      info.firstCommitDate = firstCommit?.trim() || undefined;
+      if (info.firstCommitDate) {
+        const first = new Date(info.firstCommitDate);
+        if (!Number.isNaN(first.getTime())) {
+          info.repoAgeDays = Math.floor((Date.now() - first.getTime()) / 86_400_000);
+        }
+      }
+    }
 
     const contributors = await runGit(root, ["shortlog", "-sn", "--all"]).catch(() => null);
     if (contributors) {

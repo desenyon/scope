@@ -8,6 +8,7 @@ import { renderMarkdown } from "./display/markdown.ts";
 import { Spinner } from "./display/spinner.ts";
 
 const args = process.argv.slice(2);
+const VERSION = "1.2.1";
 
 function printHelp(): void {
   const g = (t: string) => t.split("").map((c, i) => ["\x1b[38;5;141m", "\x1b[38;5;135m", "\x1b[38;5;39m", "\x1b[38;5;51m"][i % 4] + c).join("") + "\x1b[0m";
@@ -19,11 +20,13 @@ function printHelp(): void {
     scope [path]              Analyze a project
     scope export [path]       Markdown report
     scope json [path]         JSON output
+    scope help                Show this help
 
   ${d("Options")}
     -o, --output <file>       Save to file
     -q, --quiet               No spinner
     -h, --help                Help
+    -V, --version             Version
 
   ${d("Examples")}
     scope
@@ -33,22 +36,13 @@ function printHelp(): void {
 `);
 }
 
-function gradient(text: string): string {
-  const colors = ["\x1b[38;5;141m", "\x1b[38;5;135m", "\x1b[38;5;39m", "\x1b[38;5;51m"];
-  return text.split("").map((c, i) => colors[i % colors.length] + c).join("") + "\x1b[0m";
-}
-
-function dim(text: string): string {
-  return "\x1b[2m" + text + "\x1b[0m";
-}
-
 function parseArgs(argv: string[]): {
-  command: "analyze" | "export" | "json" | "help";
+  command: "analyze" | "export" | "json" | "help" | "version";
   path: string;
   output?: string;
   quiet: boolean;
 } {
-  let command: "analyze" | "export" | "json" | "help" = "analyze";
+  let command: "analyze" | "export" | "json" | "help" | "version" = "analyze";
   let path = ".";
   let output: string | undefined;
   let quiet = false;
@@ -57,13 +51,27 @@ function parseArgs(argv: string[]): {
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "-h" || arg === "--help") return { command: "help", path: ".", quiet: false };
+    if (arg === "-h" || arg === "--help" || arg === "help") {
+      return { command: "help", path: ".", quiet: false };
+    }
+    if (arg === "-V" || arg === "--version" || arg === "version") {
+      return { command: "version", path: ".", quiet: false };
+    }
     if (arg === "-q" || arg === "--quiet") { quiet = true; continue; }
-    if (arg === "--version") { console.log("scope 1.2.0"); process.exit(0); }
-    if (arg === "-o" || arg === "--output") { output = argv[++i]; continue; }
+    if (arg === "-o" || arg === "--output") {
+      const next = argv[++i];
+      if (!next || next.startsWith("-")) {
+        throw new Error("Missing value for -o/--output");
+      }
+      output = next;
+      continue;
+    }
     if (arg === "export") { command = "export"; continue; }
     if (arg === "json") { command = "json"; continue; }
-    if (!arg.startsWith("-")) positional.push(arg);
+    if (arg.startsWith("-")) {
+      throw new Error(`Unknown option: ${arg}`);
+    }
+    positional.push(arg);
   }
 
   if (positional.length > 0) path = positional[0];
@@ -78,12 +86,23 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === "version") {
+    console.log(`scope ${VERSION}`);
+    return;
+  }
+
   const resolvedPath = resolve(path);
 
   const spinner = !quiet && command === "analyze" ? new Spinner(`scanning ${resolvedPath}`) : null;
   spinner?.start();
 
-  const report = await analyze({ path: resolvedPath });
+  let report;
+  try {
+    report = await analyze({ path: resolvedPath });
+  } catch (err) {
+    spinner?.stop();
+    throw err;
+  }
 
   spinner?.stop();
 

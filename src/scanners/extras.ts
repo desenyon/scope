@@ -1,9 +1,55 @@
-import type {
-  ScriptsInfo, DatabaseInfo, RoutesInfo, ArchitectureInfo, HealthInfo, CodebaseInfo,
-} from "./extras.ts";
 import type { ProjectIndex } from "../core/index.ts";
 import type { ManifestBundle } from "../core/manifests.ts";
 import type { LanguageStats, DevOpsInfo, TestingInfo, DocumentationInfo, SecurityInfo, GitInfo } from "../types.ts";
+
+export interface ScriptsInfo {
+  scripts: Record<string, string>;
+  count: number;
+  hasBuild: boolean;
+  hasTest: boolean;
+  hasLint: boolean;
+  hasDev: boolean;
+  hasStart: boolean;
+}
+
+export interface DatabaseInfo {
+  systems: string[];
+  orms: string[];
+  hasMigrations: boolean;
+  migrationPaths: string[];
+}
+
+export interface RoutesInfo {
+  apiRoutes: number;
+  pageRoutes: number;
+  components: number;
+  total: number;
+}
+
+export interface ArchitectureInfo {
+  patterns: string[];
+  topLevelDirs: string[];
+  hasSrcLayout: boolean;
+  hasAppRouter: boolean;
+  hasPagesRouter: boolean;
+}
+
+export interface HealthInfo {
+  score: number;
+  signals: { label: string; ok: boolean }[];
+}
+
+export interface CodebaseInfo {
+  repoSizeBytes: number;
+  repoSizeHuman: string;
+  todoCount: number;
+  fixmeCount: number;
+  hackCount: number;
+  primaryLanguage?: string;
+  primaryLanguagePct?: number;
+  envVarCount: number;
+  dockerServices: string[];
+}
 
 const DB_DEPS: Record<string, string> = {
   pg: "PostgreSQL", postgres: "PostgreSQL", "@prisma/client": "Prisma",
@@ -11,7 +57,7 @@ const DB_DEPS: Record<string, string> = {
   mongodb: "MongoDB", mongoose: "MongoDB", redis: "Redis", ioredis: "Redis",
   "@supabase/supabase-js": "Supabase", firebase: "Firebase", "@planetscale/database": "PlanetScale",
   "drizzle-orm": "Drizzle", typeorm: "TypeORM", sequelize: "Sequelize", knex: "Knex",
-  sqlalchemy: "SQLAlchemy", psycopg2: "PostgreSQL", pymongo: "MongoDB", redis: "Redis",
+  sqlalchemy: "SQLAlchemy", psycopg2: "PostgreSQL", pymongo: "MongoDB",
 };
 
 const ORM_DEPS = new Set(["prisma", "@prisma/client", "drizzle-orm", "typeorm", "sequelize", "sqlalchemy", "mongoose", "knex"]);
@@ -217,6 +263,3 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
-
-// Re-export types for consumers
-export type { ScriptsInfo, DatabaseInfo, RoutesInfo, ArchitectureInfo, HealthInfo, CodebaseInfo };
