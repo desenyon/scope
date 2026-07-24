@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Unit tests
+        run: bun test
+
+      - name: Install optional scanners
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fd-find ripgrep
+          curl -fsSL https://github.com/XAMPPRocky/tokei/releases/latest/download/tokei-x86_64-unknown-linux-gnu.tar.gz | sudo tar xz -C /usr/local/bin
+          sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
+
+      - name: QA benchmark
+        run: bun run qa

@@ -352,7 +352,7 @@ export function renderTerminal(report: ScopeReport): string {
   out.push("");
   out.push(hr("╌", fg.faint));
   out.push(
-    paint("  scope", gradient) +
+    gradient("  scope") +
       paint(`  ·  ${report.durationMs}ms  ·  `, dim, fg.muted) +
       paint(`${report.locEngine} + ${report.listEngine}`, dim, fg.faint)
   );

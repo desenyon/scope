@@ -104,7 +104,10 @@ git clone https://github.com/desenyon/scope.git
 cd scope
 bun install
 bun run scope .
+bun test          # unit / regression tests
+bun run typecheck
 bun run qa        # benchmark
+bun run check     # tests + QA
 ```
 
 ## License

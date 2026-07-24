@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { stat } from "node:fs/promises";
 import type { AnalyzeOptions, ScopeReport } from "./types.ts";
 import { buildProjectIndex } from "./core/index.ts";
 import { loadManifests } from "./core/manifests.ts";
@@ -20,9 +21,22 @@ import {
   scanScripts, scanDatabase, scanRoutes, scanArchitecture, scanHealth, scanCodebase,
 } from "./scanners/extras.ts";
 
+async function assertAnalyzablePath(path: string): Promise<void> {
+  let info;
+  try {
+    info = await stat(path);
+  } catch {
+    throw new Error(`Path not found: ${path}`);
+  }
+  if (!info.isDirectory()) {
+    throw new Error(`Not a directory: ${path}`);
+  }
+}
+
 export async function analyze(options: AnalyzeOptions): Promise<ScopeReport> {
   const start = performance.now();
   const path = resolve(options.path);
+  await assertAnalyzablePath(path);
 
   const [index, manifests, git, tokeiLoc, tools] = await Promise.all([
     buildProjectIndex(path),
